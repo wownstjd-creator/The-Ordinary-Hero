@@ -10,11 +10,18 @@ public class GoblinStateMachine : MonoBehaviour
     [SerializeField] private float moveSpeed = 1.3f;
     [SerializeField] private float attackRange = 1.4f;
 
+    [Header("Parry Window")]
+    [SerializeField] private float parryStartTime = 0.25f;
+    [SerializeField] private float parryEndTime = 0.45f;
+
     [Header("Attack Timing")]
     [SerializeField] private float attackReadyTime = 0.8f;
-    [SerializeField] private float attackHitTime = 0.25f;
-    [SerializeField] private float attackDuration = 0.5f;
-    [SerializeField] private float recoveryTime = 0.8f;
+    [SerializeField] private float attackHitTime = 0.45f;
+    [SerializeField] private float attackDuration = 0.75f;
+    [SerializeField] private float recoveryTime = 1.2f;
+
+    [Header("Stagger")]
+    [SerializeField] private float staggerTime = 2.0f;
 
     [Header("Attack HitBox")]
     [SerializeField] private int damage = 1;
@@ -26,13 +33,18 @@ public class GoblinStateMachine : MonoBehaviour
     [SerializeField] private Animator animator;
     [SerializeField] private bool defaultFaceLeft = true;
 
-    [SerializeField] private float staggerTime = 1.2f;
     private Rigidbody2D rb;
     private EnemyState currentState;
     private float stateTimer;
     private bool hasHit;
 
     public EnemyState CurrentState => currentState;
+    public bool IsStaggered => currentState == EnemyState.Stagger;
+
+    public bool IsParryable =>
+        currentState == EnemyState.Attack &&
+        stateTimer >= parryStartTime &&
+        stateTimer <= parryEndTime;
 
     private void Awake()
     {
@@ -55,20 +67,20 @@ public class GoblinStateMachine : MonoBehaviour
             case EnemyState.Chase:
                 UpdateChase();
                 break;
-
             case EnemyState.AttackReady:
                 UpdateAttackReady();
                 break;
-
             case EnemyState.Attack:
                 UpdateAttack();
                 break;
-
             case EnemyState.Recovery:
                 UpdateRecovery();
                 break;
             case EnemyState.Stagger:
                 UpdateStagger();
+                break;
+            case EnemyState.Dead:
+                rb.linearVelocity = Vector2.zero;
                 break;
         }
     }
@@ -84,6 +96,10 @@ public class GoblinStateMachine : MonoBehaviour
     private void UpdateChase()
     {
         if (target == null) return;
+        Vector2 direction = ((Vector2)target.position - rb.position).normalized;
+
+        if (direction.x > 0.01f) FaceRight();
+        else if (direction.x < -0.01f) FaceLeft();
 
         float distance = Vector2.Distance(transform.position, target.position);
 
@@ -92,8 +108,6 @@ public class GoblinStateMachine : MonoBehaviour
             ChangeState(EnemyState.AttackReady);
             return;
         }
-
-        Vector2 direction = ((Vector2)target.position - rb.position).normalized;
         rb.linearVelocity = direction * moveSpeed;
 
         if (direction.x > 0.01f) FaceRight();
@@ -134,6 +148,27 @@ public class GoblinStateMachine : MonoBehaviour
         }
     }
 
+    private void UpdateStagger()
+    {
+        SetMoveAnimation(false);
+
+        if (stateTimer >= staggerTime)
+        {
+            ChangeState(EnemyState.Chase);
+        }
+    }
+
+    public void Stagger()
+    {
+        ChangeState(EnemyState.Stagger);
+    }
+
+    public void Die()
+    {
+        ChangeState(EnemyState.Dead);
+        rb.linearVelocity = Vector2.zero;
+    }
+
     private void ChangeState(EnemyState newState)
     {
         currentState = newState;
@@ -150,17 +185,17 @@ public class GoblinStateMachine : MonoBehaviour
         {
             animator.SetBool("1_Move", true);
         }
-        else if (newState == EnemyState.AttackReady)
-        {
-            // 지금은 대기 모션 사용. 나중에 전용 준비 모션 있으면 바꾼다.
-        }
         else if (newState == EnemyState.Attack)
         {
             animator.SetTrigger("2_Attack");
         }
         else if (newState == EnemyState.Stagger)
         {
-            animator.SetBool("1_Move", false);
+            animator.SetTrigger("3_Damaged");
+        }
+        else if (newState == EnemyState.Dead)
+        {
+            animator.SetTrigger("4_Death");
         }
     }
 
@@ -195,18 +230,13 @@ public class GoblinStateMachine : MonoBehaviour
 
     private Vector2 GetHitBoxCenter()
     {
-        float direction = transform.localScale.x < 0 ? -1f : 1f;
+        // SPUM 기본 방향 때문에 scale.x < 0 이 오른쪽을 보는 상태
+        float facingDirection = transform.localScale.x < 0 ? 1f : -1f;
 
         return (Vector2)transform.position + new Vector2(
-            hitBoxOffset.x * direction,
+            hitBoxOffset.x * facingDirection,
             hitBoxOffset.y
         );
-    }
-
-    public void Die()
-    {
-        ChangeState(EnemyState.Dead);
-        rb.linearVelocity = Vector2.zero;
     }
 
     private void SetMoveAnimation(bool isMoving)
@@ -235,16 +265,5 @@ public class GoblinStateMachine : MonoBehaviour
     {
         Gizmos.color = Color.yellow;
         Gizmos.DrawWireCube(GetHitBoxCenter(), hitBoxSize);
-    }
-    private void UpdateStagger()
-    {
-        if (stateTimer >= staggerTime)
-        {
-            ChangeState(EnemyState.Chase);
-        }
-    }
-    public void Stagger()
-    {
-        ChangeState(EnemyState.Stagger);
     }
 }

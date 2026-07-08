@@ -4,20 +4,21 @@ using UnityEngine.InputSystem;
 public class PlayerAttack : MonoBehaviour
 {
     [Header("Attack")]
-    [SerializeField] private int damage = 1;
-    [SerializeField] private float attackDuration = 0.45f;
-    [SerializeField] private float hitTiming = 0.18f;
+    [SerializeField] private float attackDuration = 0.8f;
+    [SerializeField] private float bladeSpawnTiming = 0.35f;
 
-    [Header("Hit Box")]
-    [SerializeField] private Vector2 hitBoxSize = new Vector2(1.2f, 1f);
-    [SerializeField] private Vector2 hitBoxOffset = new Vector2(0.8f, 0f);
-    [SerializeField] private LayerMask enemyLayer;
+    [Header("Blade")]
+    [SerializeField] private GameObject bladePrefab;
+    [SerializeField] private Transform bladeSpawnPoint;
+
+    [Header("Direction")]
+    [SerializeField] private bool defaultFaceLeft = true;
 
     [Header("Animation")]
     [SerializeField] private Animator animator;
 
     private bool isAttacking;
-    private bool hasHit;
+    private bool hasSpawnedBlade;
     private float attackTimer;
 
     public bool IsAttacking => isAttacking;
@@ -44,10 +45,10 @@ public class PlayerAttack : MonoBehaviour
 
         attackTimer += Time.deltaTime;
 
-        if (!hasHit && attackTimer >= hitTiming)
+        if (!hasSpawnedBlade && attackTimer >= bladeSpawnTiming)
         {
-            CheckHit();
-            hasHit = true;
+            SpawnBlade();
+            hasSpawnedBlade = true;
         }
 
         if (attackTimer >= attackDuration)
@@ -59,7 +60,7 @@ public class PlayerAttack : MonoBehaviour
     private void StartAttack()
     {
         isAttacking = true;
-        hasHit = false;
+        hasSpawnedBlade = false;
         attackTimer = 0f;
 
         if (animator != null)
@@ -76,48 +77,36 @@ public class PlayerAttack : MonoBehaviour
         Debug.Log("공격 종료");
     }
 
-    private void CheckHit()
+    private void SpawnBlade()
     {
-        Vector2 center = GetHitBoxCenter();
-
-        Collider2D[] hits = Physics2D.OverlapBoxAll(
-            center,
-            hitBoxSize,
-            0f,
-            enemyLayer
-        );
-
-        foreach (Collider2D hit in hits)
+        if (bladePrefab == null || bladeSpawnPoint == null)
         {
-            EnemyHealth enemy = hit.GetComponent<EnemyHealth>();
-
-            if (enemy == null)
-            {
-                enemy = hit.GetComponentInParent<EnemyHealth>();
-            }
-
-            if (enemy != null)
-            {
-                enemy.TakeDamage(damage);
-            }
+            Debug.LogWarning("Blade Prefab 또는 Blade Spawn Point가 비어있음");
+            return;
         }
 
-        Debug.Log($"공격 판정: {hits.Length}개 감지");
-    }
+        int direction = GetFacingDirection();
 
-    private Vector2 GetHitBoxCenter()
-    {
-        float direction = transform.localScale.x < 0 ? 1f : -1f;
-
-        return (Vector2)transform.position + new Vector2(
-            hitBoxOffset.x * direction,
-            hitBoxOffset.y
+        GameObject bladeObject = Instantiate(
+            bladePrefab,
+            bladeSpawnPoint.position,
+            Quaternion.identity
         );
+
+        Blade blade = bladeObject.GetComponent<Blade>();
+
+        if (blade != null)
+        {
+            blade.Init(direction);
+        }
+
+        Debug.Log("Blade 생성");
     }
 
-    private void OnDrawGizmosSelected()
+    private int GetFacingDirection()
     {
-        Gizmos.color = Color.red;
-        Gizmos.DrawWireCube(GetHitBoxCenter(), hitBoxSize);
+        // 네 프로젝트 현재 기준:
+        // scale.x < 0 이 오른쪽
+        return transform.localScale.x < 0 ? 1 : -1;
     }
 }

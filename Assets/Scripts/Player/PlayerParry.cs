@@ -6,13 +6,20 @@ public class PlayerParry : MonoBehaviour
     [Header("Parry")]
     [SerializeField] private float parryDuration = 0.25f;
     [SerializeField] private float parryRange = 1.6f;
+    [SerializeField] private float parryCooldown = 0.8f;
+    [SerializeField] private float failedParryLockTime = 0.5f;
     [SerializeField] private LayerMask enemyLayer;
 
     private bool isParrying;
+    private bool isLockedByFailedParry;
     private float parryTimer;
+    private float cooldownTimer;
+    private float failedLockTimer;
+
+    private PlayerFocus playerFocus;
 
     public bool IsParrying => isParrying;
-    private PlayerFocus playerFocus;
+    public bool IsLockedByFailedParry => isLockedByFailedParry;
 
     private void Awake()
     {
@@ -24,19 +31,37 @@ public class PlayerParry : MonoBehaviour
         if (!value.isPressed) return;
         if (playerFocus != null && playerFocus.IsFocusing) return;
         if (isParrying) return;
+        if (isLockedByFailedParry) return;
+        if (cooldownTimer > 0f) return;
 
         StartParry();
     }
 
     private void Update()
     {
-        if (!isParrying) return;
-
-        parryTimer -= Time.deltaTime;
-
-        if (parryTimer <= 0f)
+        if (cooldownTimer > 0f)
         {
-            isParrying = false;
+            cooldownTimer -= Time.deltaTime;
+        }
+
+        if (isParrying)
+        {
+            parryTimer -= Time.deltaTime;
+
+            if (parryTimer <= 0f)
+            {
+                EndParry(false);
+            }
+        }
+
+        if (isLockedByFailedParry)
+        {
+            failedLockTimer -= Time.deltaTime;
+
+            if (failedLockTimer <= 0f)
+            {
+                isLockedByFailedParry = false;
+            }
         }
     }
 
@@ -44,13 +69,31 @@ public class PlayerParry : MonoBehaviour
     {
         isParrying = true;
         parryTimer = parryDuration;
+        cooldownTimer = parryCooldown;
 
-        TryParryEnemy();
+        bool success = TryParryEnemy();
+
+        if (success)
+        {
+            EndParry(true);
+        }
 
         Debug.Log("패링 시도");
     }
 
-    private void TryParryEnemy()
+    private void EndParry(bool success)
+    {
+        isParrying = false;
+
+        if (!success)
+        {
+            isLockedByFailedParry = true;
+            failedLockTimer = failedParryLockTime;
+            Debug.Log("패링 실패 - 경직");
+        }
+    }
+
+    private bool TryParryEnemy()
     {
         Collider2D[] hits = Physics2D.OverlapCircleAll(
             transform.position,
@@ -69,15 +112,19 @@ public class PlayerParry : MonoBehaviour
 
             if (goblin == null) continue;
 
-            if (goblin.CurrentState == EnemyState.Attack)
+            if (goblin.IsParryable)
             {
                 goblin.Stagger();
                 Debug.Log("패링 성공!");
-                return;
+                if (HitStop.Instance != null)
+                {
+                    HitStop.Instance.Stop(0.07f);
+                }
+                return true;
             }
         }
 
-        Debug.Log("패링 실패");
+        return false;
     }
 
     private void OnDrawGizmosSelected()

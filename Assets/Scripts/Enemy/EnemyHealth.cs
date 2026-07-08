@@ -1,5 +1,5 @@
 using UnityEngine;
-
+using System.Collections;
 public class EnemyHealth : MonoBehaviour
 {
     [SerializeField] private int maxHp = 3;
@@ -9,18 +9,34 @@ public class EnemyHealth : MonoBehaviour
     [Header("Animation")]
     [SerializeField] private Animator animator;
 
+    [Header("Hit Flash")]
+    private SpriteRenderer[] spriteRenderers;
+    private Color[] originalColors;
+    [SerializeField] private float flashTime = 0.06f;
+
+     
     private int currentHp;
     private DetectableObject detectable;
+    private GoblinStateMachine stateMachine;
     private bool isDead;
 
     private void Awake()
     {
         currentHp = maxHp;
         detectable = GetComponent<DetectableObject>();
+        stateMachine = GetComponent<GoblinStateMachine>();
 
         if (animator == null)
         {
             animator = GetComponentInChildren<Animator>();
+        }
+        spriteRenderers = GetComponentsInChildren<SpriteRenderer>();
+
+        originalColors = new Color[spriteRenderers.Length];
+
+        for (int i = 0; i < spriteRenderers.Length; i++)
+        {
+            originalColors[i] = spriteRenderers[i].color;
         }
     }
 
@@ -28,10 +44,20 @@ public class EnemyHealth : MonoBehaviour
     {
         if (isDead) return;
 
-        currentHp -= damage;
+        int finalDamage = damage;
+
+        if (stateMachine != null && stateMachine.IsStaggered)
+        {
+            finalDamage *= 2;
+            Debug.Log("스태거 추가 데미지!");
+        }
+
+        currentHp -= finalDamage;
+        StartCoroutine(HitFlash());
 
         if (detectable != null)
         {
+            detectable.HitFlash();
             detectable.RevealFullTemporary(hitRevealTime);
         }
 
@@ -46,7 +72,7 @@ public class EnemyHealth : MonoBehaviour
             animator.SetTrigger("3_Damaged");
         }
 
-        Debug.Log($"{gameObject.name} 피격! 남은 HP: {currentHp}");
+        Debug.Log($"{gameObject.name} 피격! 데미지: {finalDamage}, 남은 HP: {currentHp}");
     }
 
     private void Die()
@@ -66,5 +92,19 @@ public class EnemyHealth : MonoBehaviour
         Debug.Log($"{gameObject.name} 사망");
 
         Destroy(gameObject, deathDestroyDelay);
+    }
+    private IEnumerator HitFlash()
+    {
+        foreach (SpriteRenderer sr in spriteRenderers)
+        {
+            sr.color = Color.white;
+        }
+
+        yield return new WaitForSeconds(flashTime);
+
+        for (int i = 0; i < spriteRenderers.Length; i++)
+        {
+            spriteRenderers[i].color = originalColors[i];
+        }
     }
 }

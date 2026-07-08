@@ -9,6 +9,10 @@ public class DetectableObject : MonoBehaviour
         Silhouette,
         Full
     }
+    [Header("Hit Flash")]
+    [SerializeField] private float flashTime = 0.06f;
+
+    private float flashTimer;
 
     [Header("Renderers")]
     [SerializeField] private SpriteRenderer presenceMarker;
@@ -58,6 +62,12 @@ public class DetectableObject : MonoBehaviour
 
     private void Update()
     {
+        if (flashTimer > 0f)
+        {
+            flashTimer -= Time.deltaTime;
+            ApplyFlash();
+            return;
+        }
         if (revealTimer > 0f)
         {
             revealTimer -= Time.deltaTime;
@@ -82,7 +92,24 @@ public class DetectableObject : MonoBehaviour
 
         ApplyMemory();
     }
+    public void HitFlash()
+    {
+        flashTimer = flashTime;
+    }
 
+    private void ApplyFlash()
+    {
+        SetPresenceAlpha(0f);
+
+        foreach (SpriteRenderer sr in bodyRenderers)
+        {
+            if (sr == null) continue;
+
+            Color color = Color.white;
+            color.a = 1f;
+            sr.color = color;
+        }
+    }
     public void Reveal()
     {
         familiarity++;
